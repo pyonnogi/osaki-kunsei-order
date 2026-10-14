@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>オーダー・会計管理 (ハンディ版)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      touch-action: manipulation;
+    }
+    .active-tab {
+      background-color: #2563eb;
+      color: white;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800 pb-20">
+
+  <!-- ヘッダー -->
+  <header class="bg-slate-900 text-white p-4 sticky top-0 z-30 shadow-md">
+    <div class="max-w-xl mx-auto flex justify-between items-center">
+      <h1 class="text-2xl font-bold tracking-wide flex items-center gap-2">
+        <i class="fa-solid font-bold fa-utensils text-blue-400"></i> オーダー管理
+      </h1>
+      <button onclick="openCheckinModal()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-lg font-bold shadow-lg flex items-center gap-2 transition active:scale-95">
+        <i class="fa-solid fa-user-plus"></i> 新規入店
+      </button>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main class="max-w-xl mx-auto p-3">
+
+    <!-- TAB 1: 顧客（滞在中）一覧 -->
+    <div id="tab-customers" class="tab-content">
+      <div id="customer-list" class="space-y-4">
+        <!-- JSでカードがここに生成されます -->
+      </div>
+    </div>
+
+    <!-- TAB 2: 商品管理 -->
+    <div id="tab-products" class="tab-content hidden">
+      <div class="bg-white p-4 rounded-2xl shadow mb-4">
+        <h2 class="text-xl font-bold mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-plus-circle text-blue-600"></i> 新規商品登録
+        </h2>
+        <form id="product-form" onsubmit="handleSaveProduct(event)" class="space-y-3">
+          <div>
+            <label class="block text-sm font-bold text-gray-700 mb-1">商品名</label>
+            <input type="text" id="prod-name" required placeholder="例: ハイボール" class="w-full p-3 border-2 border-gray-300 rounded-xl text-lg focus:border-blue-500 outline-none">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-bold text-gray-700 mb-1">価格 (税込)</label>
+              <input type="number" id="prod-price" required placeholder="500" class="w-full p-3 border-2 border-gray-300 rounded-xl text-lg focus:border-blue-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-bold text-gray-700 mb-1">カテゴリ</label>
+              <select id="prod-category" class="w-full p-3 border-2 border-gray-300 rounded-xl text-lg focus:border-blue-500 outline-none bg-white">
+                <option value="drink">ドリンク</option>
+                <option value="food">フード</option>
+                <option value="other">その他</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-gray-700 mb-1">デフォルト支払い設定</label>
+            <select id="prod-default-paid" class="w-full p-3 border-2 border-gray-300 rounded-xl text-lg focus:border-blue-500 outline-none bg-white">
+              <option value="false">未払い（後払い）</option>
+              <option value="true">キャッシュオン（即時支払済）</option>
+            </select>
+          </div>
+          <button type="submit" class="w-full bg-emerald-600 text-white py-3 rounded-xl text-xl font-bold shadow-md hover:bg-emerald-500 active:scale-98 transition">
+            商品を追加保存
+          </button>
+        </form>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl shadow">
+        <h2 class="text-xl font-bold mb-3">登録商品一覧</h2>
+        <div id="registered-products-list" class="divide-y divide-gray-200">
+          <!-- 商品一覧 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: 売上・履歴 -->
+    <div id="tab-sales" class="tab-content hidden space-y-4">
+      <!-- 集計カード -->
+      <div class="bg-white p-4 rounded-2xl shadow border-2 border-slate-200 space-y-3">
+        <h2 class="text-lg font-bold text-gray-500 flex items-center justify-between">
+          <span><i class="fa-solid fa-chart-line text-blue-600"></i> 本日の売上合計</span>
+          <span class="text-xs font-normal text-gray-400" id="sales-today-date">----/--/--</span>
+        </h2>
+        <div class="text-4xl font-extrabold text-slate-900" id="total-sales-amount">¥0</div>
+        
+        <div class="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+          <div class="bg-emerald-50 p-2 rounded-xl text-center">
+            <div class="text-xs text-emerald-700 font-bold">現金売上</div>
+            <div class="text-lg font-extrabold text-emerald-900" id="sales-cash">¥0</div>
+          </div>
+          <div class="bg-purple-50 p-2 rounded-xl text-center">
+            <div class="text-xs text-purple-700 font-bold">キャッシュレス</div>
+            <div class="text-lg font-extrabold text-purple-900" id="sales-cashless">¥0</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2 text-center text-xs pt-1">
+          <div class="bg-gray-100 p-2 rounded-lg">
+            <span class="text-gray-500 block">チャージ</span>
+            <span class="font-bold text-sm" id="sales-charge">¥0</span>
+          </div>
+          <div class="bg-gray-100 p-2 rounded-lg">
+            <span class="text-gray-500 block">ドリンク</span>
+            <span class="font-bold text-sm" id="sales-drink">¥0</span>
+          </div>
+          <div class="bg-gray-100 p-2 rounded-lg">
+            <span class="text-gray-500 block">フード</span>
+            <span class="font-bold text-sm" id="sales-food">¥0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 退店履歴 -->
+      <div class="bg-white p-4 rounded-2xl shadow">
+        <h3 class="text-lg font-bold text-gray-800 mb-3">会計完了・退店履歴</h3>
+        <div id="history-list" class="space-y-3">
+          <!-- 履歴カード -->
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ボトムナビゲーション -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30">
+    <div class="max-w-xl mx-auto flex justify-around">
+      <button onclick="switchTab('customers')" id="nav-customers" class="flex-1 py-3 text-center text-blue-600 border-t-4 border-blue-600 font-bold active-tab">
+        <i class="fa-solid fa-users text-xl block"></i>
+        <span class="text-xs">顧客一覧</span>
+      </button>
+      <button onclick="switchTab('products')" id="nav-products" class="flex-1 py-3 text-center text-gray-500 border-t-4 border-transparent font-bold">
+        <i class="fa-solid fa-list text-xl block"></i>
+        <span class="text-xs">商品管理</span>
+      </button>
+      <button onclick="switchTab('sales')" id="nav-sales" class="flex-1 py-3 text-center text-gray-500 border-t-4 border-transparent font-bold">
+        <i class="fa-solid fa-receipt text-xl block"></i>
+        <span class="text-xs">売上管理</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- モーダル1: 新規入店 -->
+  <div id="checkin-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4">
+      <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+        <i class="fa-solid fa-user-plus text-blue-600"></i> 新規チェックイン
+      </h2>
+      
+      <div>
+        <label class="block text-sm font-bold text-gray-700 mb-1">顧客名 / 伝票メモ</label>
+        <input type="text" id="checkin-name" placeholder="例: 田中様、カウンターA" class="w-full p-4 border-2 border-gray-300 rounded-2xl text-xl focus:border-blue-500 outline-none">
+      </div>
+
+      <div>
+        <label class="block text-sm font-bold text-gray-700 mb-1">人数</label>
+        <div class="flex items-center gap-3">
+          <button onclick="changeGuestCount(-1)" class="w-14 h-14 bg-gray-200 text-gray-800 text-2xl font-bold rounded-2xl active:bg-gray-300">-</button>
+          <input type="number" id="checkin-guests" value="1" min="1" class="w-full text-center p-3 border-2 border-gray-300 rounded-2xl text-2xl font-bold outline-none" readonly>
+          <button onclick="changeGuestCount(1)" class="w-14 h-14 bg-gray-200 text-gray-800 text-2xl font-bold rounded-2xl active:bg-gray-300">+</button>
+        </div>
+      </div>
+
+      <div class="bg-blue-50 p-4 rounded-2xl space-y-2 border border-blue-100">
+        <div class="flex justify-between items-center text-sm font-bold text-blue-900">
+          <span>チャージ設定 (先払い):</span>
+          <span id="charge-rate-display">¥500 / 名</span>
+        </div>
+        <div class="flex justify-between items-center text-xl font-extrabold text-blue-900">
+          <span>徴収金額:</span>
+          <span id="checkin-charge-total">¥500</span>
+        </div>
+
+        <div class="pt-2">
+          <label class="block text-xs font-bold text-blue-800 mb-1">チャージの支払い方法:</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" onclick="setChargePayment('cash')" id="btn-charge-cash" class="py-3 font-bold rounded-xl border-2 border-emerald-600 bg-emerald-600 text-white text-center">
+              💵 現金
+            </button>
+            <button type="button" onclick="setChargePayment('cashless')" id="btn-charge-cashless" class="py-3 font-bold rounded-xl border-2 border-gray-300 bg-white text-gray-700 text-center">
+              💳 キャッシュレス
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button onclick="closeCheckinModal()" class="flex-1 bg-gray-200 text-gray-700 py-4 rounded-2xl font-bold text-lg">キャンセル</button>
+        <button onclick="handleCheckin()" class="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg active:scale-95 transition">入店を確定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- モーダル2: 伝票詳細・注文追加 -->
+  <div id="detail-modal" class="fixed inset-0 bg-black/60 z-40 hidden flex items-end sm:items-center justify-center">
+    <div class="bg-white w-full max-w-xl h-[92vh] sm:h-[85vh] rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 flex flex-col justify-between shadow-2xl">
+      
+      <!-- モーダルヘッダー -->
+      <div class="pb-3 border-b flex justify-between items-start">
+        <div>
+          <div class="flex items-center gap-2">
+            <span id="detail-code" class="text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono">#---</span>
+            <h2 id="detail-name" class="text-2xl font-extrabold text-gray-900">---</h2>
+          </div>
+          <div class="text-sm text-gray-500 mt-1">
+            人数: <span id="detail-guests" class="font-bold text-gray-800">1</span>名 | 
+            入店: <span id="detail-time" class="font-bold text-gray-800">--:--</span>
+          </div>
+        </div>
+        <button onclick="closeDetailModal()" class="text-gray-400 hover:text-gray-600 p-2 text-2xl font-bold">✕</button>
+      </div>
+
+      <!-- 注文追加エリア -->
+      <div class="py-3 border-b bg-slate-50 p-3 rounded-2xl my-2">
+        <div class="text-xs font-bold text-slate-500 mb-2">【スピード注文追加】</div>
+        
+        <!-- アイテム選択ボタンエリア（スクロール可能） -->
+        <div id="quick-menu-buttons" class="flex gap-2 overflow-x-auto pb-2 mb-3">
+          <!-- JSで自動配置 -->
+        </div>
+
+        <!-- 選択中のアイテム & 支払い種別トグル -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white p-3 rounded-xl border border-slate-200">
+          <div>
+            <span class="text-xs text-gray-400 block">選択中の商品</span>
+            <span id="selected-product-display" class="font-bold text-base text-gray-800">商品を選択してください</span>
+          </div>
+          <div>
+            <span class="text-xs text-gray-400 block mb-1">支払い選択 (キャッシュオン)</span>
+            <div class="grid grid-cols-3 gap-1">
+              <button onclick="setOrderPayType('unpaid')" id="pay-type-unpaid" class="text-xs py-2 rounded-lg font-bold border border-gray-300 bg-red-100 text-red-700 border-red-500">
+                未精算
+              </button>
+              <button onclick="setOrderPayType('cash')" id="pay-type-cash" class="text-xs py-2 rounded-lg font-bold border border-gray-300 bg-gray-100 text-gray-600">
+                💵 現金
+              </button>
+              <button onclick="setOrderPayType('cashless')" id="pay-type-cashless" class="text-xs py-2 rounded-lg font-bold border border-gray-300 bg-gray-100 text-gray-600">
+                💳 決済
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button onclick="handleAddOrderItem()" id="add-order-btn" disabled class="w-full mt-2 bg-blue-600 disabled:bg-gray-300 text-white py-3 rounded-xl font-bold text-lg shadow active:scale-98 transition">
+          注文を追加する
+        </button>
+      </div>
+
+      <!-- 注文一覧（明細） -->
+      <div class="flex-1 overflow-y-auto my-2 pr-1 space-y-2" id="detail-items-list">
+        <!-- JSで明細が並びます -->
+      </div>
+
+      <!-- フッター（会計エリア） -->
+      <div class="pt-3 border-t bg-gray-50 -mx-4 -mb-4 p-4 rounded-b-3xl space-y-3">
+        <div class="flex justify-between items-baseline">
+          <span class="text-sm font-bold text-gray-600">未払い残高:</span>
+          <span id="detail-unpaid-total" class="text-3xl font-extrabold text-red-600">¥0</span>
+        </div>
+
+        <div class="flex gap-2">
+          <button onclick="handleCheckoutModal()" id="btn-checkout" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 rounded-2xl text-xl font-extrabold shadow-lg active:scale-95 transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-cash-register"></i> 会計して退店
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- モーダル3: 退店時の一括精算確認 -->
+  <div id="checkout-modal" class="fixed inset-0 bg-black/70 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center">
+      <h3 class="text-2xl font-bold text-gray-800">一括会計・退店</h3>
+      
+      <div class="bg-red-50 p-4 rounded-2xl border border-red-100">
+        <div class="text-xs font-bold text-red-600">精算する未払い金額</div>
+        <div id="checkout-modal-amount" class="text-4xl font-black text-red-600 mt-1">¥0</div>
+      </div>
+
+      <p class="text-sm text-gray-500 font-bold">残りの未払い分の支払い方法を選択してください</p>
+
+      <div class="grid grid-cols-2 gap-3 pt-2">
+        <button onclick="execCheckout('cash')" class="bg-emerald-600 text-white py-4 rounded-2xl font-bold text-lg shadow-md active:scale-95 flex flex-col items-center justify-center">
+          <span class="text-2xl mb-1">💵</span>
+          <span>現金で会計</span>
+        </button>
+        <button onclick="execCheckout('cashless')" class="bg-purple-600 text-white py-4 rounded-2xl font-bold text-lg shadow-md active:scale-95 flex flex-col items-center justify-center">
+          <span class="text-2xl mb-1">💳</span>
+          <span>キャッシュレス</span>
+        </button>
+      </div>
+
+      <button onclick="closeCheckoutModal()" class="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-bold text-sm mt-2">
+        戻る
+      </button>
+    </div>
+  </div>
+
+
+  <!-- アプリのJSロジック -->
+  <script>
+    // --- 初期データ構造 ---
+    const CHARGE_PRICE_PER_PERSON = 500; // チャージ単価
+
+    let products = [
+      { id: 'p1', name: '生ビール', price: 600, category: 'drink', defaultPaid: false },
+      { id: 'p2', name: 'ハイボール', price: 500, category: 'drink', defaultPaid: false },
+      { id: 'p3', name: '枝豆', price: 400, category: 'food', defaultPaid: false },
+      { id: 'p4', name: '唐揚げ', price: 650, category: 'food', defaultPaid: false },
+      { id: 'p5', name: 'ショットテキーラ', price: 800, category: 'drink', defaultPaid: true } // キャッシュオン推奨例
+    ];
+
+    let activeCustomers = [
+      {
+        id: 'c1',
+        code: '101',
+        name: '山田様',
+        guests: 2,
+        checkinTime: '18:30',
+        items: [
+          { id: 'i1', name: 'チャージ', price: 1000, category: 'charge', paid: true, payType: 'cash', time: '18:30' },
+          { id: 'i2', name: '生ビール', price: 600, category: 'drink', paid: true, payType: 'cash', time: '18:32' },
+          { id: 'i3', name: '唐揚げ', price: 650, category: 'food', paid: false, payType: null, time: '18:35' }
+        ]
+      }
+    ];
+
+    let salesHistory = [];
+
+    // 状態管理用
+    let currentSelectedCustomerId = null;
+    let selectedProductForOrder = null;
+    let selectedOrderPayType = 'unpaid'; // 'unpaid', 'cash', 'cashless'
+    let selectedChargePayType = 'cash';  // 'cash', 'cashless'
+
+    // --- 初期化 ---
+    window.addEventListener('DOMContentLoaded', () => {
+      loadLocalStorage();
+      renderCustomerList();
+      renderProductList();
+      renderQuickMenuButtons();
+      renderSalesSummary();
+    });
+
+    // --- ローカルストレージ操作 ---
+    function saveData() {
+      localStorage.setItem('om_products', JSON.stringify(products));
+      localStorage.setItem('om_customers', JSON.stringify(activeCustomers));
+      localStorage.setItem('om_history', JSON.stringify(salesHistory));
+    }
+
+    function loadLocalStorage() {
+      const p = localStorage.getItem('om_products');
+      const c = localStorage.getItem('om_customers');
+      const h = localStorage.getItem('om_history');
+      if (p) products = JSON.parse(p);
+      if (c) activeCustomers = JSON.parse(c);
+      if (h) salesHistory = JSON.parse(h);
+    }
+
+    // --- タブ切り替え ---
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+
+      ['customers', 'products', 'sales'].forEach(t => {
+        const btn = document.getElementById(`nav-${t}`);
+        if (t === tabName) {
+          btn.classList.add('text-blue-600', 'border-blue-600', 'active-tab');
+          btn.classList.remove('text-gray-500', 'border-transparent');
+        } else {
+          btn.classList.remove('text-blue-600', 'border-blue-600', 'active-tab');
+          btn.classList.add('text-gray-500', 'border-transparent');
+        }
+      });
+
+      if (tabName === 'sales') renderSalesSummary();
+    }
+
+    // --- 顧客（伝票）一覧描画 ---
+    function renderCustomerList() {
+      const container = document.getElementById('customer-list');
+      container.innerHTML = '';
+
+      if (activeCustomers.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-gray-400 font-bold text-lg">
+            滞在中の滞在客はいません<br>右上の「新規入店」から追加してください
+          </div>`;
+        return;
+      }
+
+      activeCustomers.forEach(cust => {
+        const totalUnpaid = cust.items.filter(i => !i.paid).reduce((sum, i) => sum + i.price, 0);
+        const totalPaid = cust.items.filter(i => i.paid).reduce((sum, i) => sum + i.price, 0);
+
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-3xl p-5 shadow-md border-2 border-gray-100 active:scale-98 transition cursor-pointer flex justify-between items-center';
+        card.onclick = () => openDetailModal(cust.id);
+
+        card.innerHTML = `
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">#${cust.code}</span>
+              <h3 class="text-2xl font-black text-gray-800">${cust.name}</h3>
+            </div>
+            <div class="text-sm font-bold text-gray-500 flex items-center gap-3">
+              <span>👥 ${cust.guests}名</span>
+              <span>⏰ ${cust.checkinTime} 入店</span>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="text-xs font-bold text-gray-400">未精算残高</div>
+            <div class="text-3xl font-black ${totalUnpaid > 0 ? 'text-red-600' : 'text-emerald-600'}">
+              ¥${totalUnpaid.toLocaleString()}
+            </div>
+            <div class="text-xs text-gray-400 mt-0.5">（支払済: ¥${totalPaid.toLocaleString()}）</div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // --- モーダル: チェックイン (新規入店) ---
+    function openCheckinModal() {
+      document.getElementById('checkin-name').value = '';
+      document.getElementById('checkin-guests').value = '1';
+      setChargePayment('cash');
+      updateCheckinCharge();
+      document.getElementById('checkin-modal').classList.remove('hidden');
+    }
+
+    function closeCheckinModal() {
+      document.getElementById('checkin-modal').classList.add('hidden');
+    }
+
+    function changeGuestCount(delta) {
+      const input = document.getElementById('checkin-guests');
+      let val = parseInt(input.value) || 1;
+      val = Math.max(1, val + delta);
+      input.value = val;
+      updateCheckinCharge();
+    }
+
+    function updateCheckinCharge() {
+      const guests = parseInt(document.getElementById('checkin-guests').value) || 1;
+      const total = guests * CHARGE_PRICE_PER_PERSON;
+      document.getElementById('checkin-charge-total').innerText = `¥${total.toLocaleString()}`;
+    }
+
+    function setChargePayment(type) {
+      selectedChargePayType = type;
+      const btnCash = document.getElementById('btn-charge-cash');
+      const btnCashless = document.getElementById('btn-charge-cashless');
+
+      if (type === 'cash') {
+        btnCash.className = 'py-3 font-bold rounded-xl border-2 border-emerald-600 bg-emerald-600 text-white text-center';
+        btnCashless.className = 'py-3 font-bold rounded-xl border-2 border-gray-300 bg-white text-gray-700 text-center';
+      } else {
+        btnCash.className = 'py-3 font-bold rounded-xl border-2 border-gray-300 bg-white text-gray-700 text-center';
+        btnCashless.className = 'py-3 font-bold rounded-xl border-2 border-purple-600 bg-purple-600 text-white text-center';
+      }
+    }
+
+    function handleCheckin() {
+      const nameInput = document.getElementById('checkin-name').value.trim();
+      const guests = parseInt(document.getElementById('checkin-guests').value) || 1;
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      
+      const newCust = {
+        id: 'c_' + Date.now(),
+        code: String(Math.floor(Math.random() * 899) + 100),
+        name: nameInput || `伝票 #${Math.floor(Math.random() * 899) + 100}`,
+        guests: guests,
+        checkinTime: timeStr,
+        items: [
+          {
+            id: 'item_' + Date.now(),
+            name: `チャージ (${guests}名)`,
+            price: guests * CHARGE_PRICE_PER_PERSON,
+            category: 'charge',
+            paid: true,
+            payType: selectedChargePayType,
+            time: timeStr
+          }
+        ]
+      };
+
+      activeCustomers.unshift(newCust);
+      saveData();
+      renderCustomerList();
+      closeCheckinModal();
+    }
+
+    // --- モーダル: 伝票詳細 ---
+    function openDetailModal(custId) {
+      currentSelectedCustomerId = custId;
+      const cust = activeCustomers.find(c => c.id === custId);
+      if (!cust) return;
+
+      document.getElementById('detail-code').innerText = `#${cust.code}`;
+      document.getElementById('detail-name').innerText = cust.name;
+      document.getElementById('detail-guests').innerText = cust.guests;
+      document.getElementById('detail-time').innerText = cust.checkinTime;
+
+      selectedProductForOrder = null;
+      document.getElementById('selected-product-display').innerText = '商品を選択してください';
+      document.getElementById('add-order-btn').disabled = true;
+
+      renderDetailItemList(cust);
+      document.getElementById('detail-modal').classList.remove('hidden');
+    }
+
+    function closeDetailModal() {
+      document.getElementById('detail-modal').classList.add('hidden');
+    }
+
+    function renderDetailItemList(cust) {
+      const listContainer = document.getElementById('detail-items-list');
+      listContainer.innerHTML = '';
+
+      let unpaidTotal = 0;
+
+      cust.items.forEach(item => {
+        if (!item.paid) unpaidTotal += item.price;
+
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between p-3 rounded-2xl border border-gray-200 bg-white shadow-sm';
+        
+        let badgeHtml = '';
+        if (item.paid) {
+          const typeLabel = item.payType === 'cash' ? '💵 現金' : '💳 決済';
+          badgeHtml = `<span class="text-xs px-2 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-lg">済 (${typeLabel})</span>`;
+        } else {
+          badgeHtml = `<button onclick="toggleItemPaidStatus('${item.id}')" class="text-xs px-2 py-1 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg border border-red-300">未払い (タップで済へ)</button>`;
+        }
+
+        row.innerHTML = `
+          <div class="flex items-center gap-2">
+            <div>
+              <div class="font-extrabold text-gray-800 text-base">${item.name}</div>
+              <div class="text-xs text-gray-400">${item.time}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="font-black text-gray-900 text-lg">¥${item.price.toLocaleString()}</span>
+            ${badgeHtml}
+          </div>
+        `;
+        listContainer.appendChild(row);
+      });
+
+      document.getElementById('detail-unpaid-total').innerText = `¥${unpaidTotal.toLocaleString()}`;
+    }
+
+    function toggleItemPaidStatus(itemId) {
+      const cust = activeCustomers.find(c => c.id === currentSelectedCustomerId);
+      if (!cust) return;
+      const item = cust.items.find(i => i.id === itemId);
+      if (item && !item.paid) {
+        item.paid = true;
+        item.payType = 'cash'; // デフォルト現金済みに
+        saveData();
+        renderDetailItemList(cust);
+        renderCustomerList();
+      }
+    }
+
+    // --- 注文入力エリア ---
+    function renderQuickMenuButtons() {
+      const container = document.getElementById('quick-menu-buttons');
+      container.innerHTML = '';
+
+      products.forEach(p => {
+        const btn = document.createElement('button');
+        btn.className = 'px-4 py-3 bg-white border-2 border-slate-300 rounded-2xl font-bold text-gray-800 text-base whitespace-nowrap active:bg-blue-50 shadow-sm';
+        btn.innerHTML = `${p.name} <span class="text-xs text-gray-500">¥${p.price}</span>`;
+        btn.onclick = () => selectProductForOrder(p);
+        container.appendChild(btn);
+      });
+    }
+
+    function selectProductForOrder(product) {
+      selectedProductForOrder = product;
+      document.getElementById('selected-product-display').innerText = `${product.name} (¥${product.price})`;
+      document.getElementById('add-order-btn').disabled = false;
+
+      // 商品のデフォルト支払設定を適用
+      if (product.defaultPaid) {
+        setOrderPayType('cash');
+      } else {
+        setOrderPayType('unpaid');
+      }
+    }
+
+    function setOrderPayType(type) {
+      selectedOrderPayType = type;
+      const btnUnpaid = document.getElementById('pay-type-unpaid');
+      const btnCash = document.getElementById('pay-type-cash');
+      const btnCashless = document.getElementById('pay-type-cashless');
+
+      btnUnpaid.className = 'text-xs py-2 rounded-lg font-bold border border-gray-300 bg-gray-100 text-gray-600';
+      btnCash.className = 'text-xs py-2 rounded-lg font-bold border border-gray-300 bg-gray-100 text-gray-600';
+      btnCashless.className = 'text-xs py-2 rounded-lg font-bold border border-gray-300 bg-gray-100 text-gray-600';
+
+      if (type === 'unpaid') {
+        btnUnpaid.className = 'text-xs py-2 rounded-lg font-bold border-2 border-red-500 bg-red-100 text-red-700';
+      } else if (type === 'cash') {
+        btnCash.className = 'text-xs py-2 rounded-lg font-bold border-2 border-emerald-600 bg-emerald-600 text-white';
+      } else if (type === 'cashless') {
+        btnCashless.className = 'text-xs py-2 rounded-lg font-bold border-2 border-purple-600 bg-purple-600 text-white';
+      }
+    }
+
+    function handleAddOrderItem() {
+      if (!selectedProductForOrder || !currentSelectedCustomerId) return;
+
+      const cust = activeCustomers.find(c => c.id === currentSelectedCustomerId);
+      if (!cust) return;
+
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+      const newItem = {
+        id: 'item_' + Date.now(),
+        name: selectedProductForOrder.name,
+        price: selectedProductForOrder.price,
+        category: selectedProductForOrder.category,
+        paid: selectedOrderPayType !== 'unpaid',
+        payType: selectedOrderPayType === 'unpaid' ? null : selectedOrderPayType,
+        time: timeStr
+      };
+
+      cust.items.push(newItem);
+      saveData();
+
+      renderDetailItemList(cust);
+      renderCustomerList();
+
+      // リセット
+      selectedProductForOrder = null;
+      document.getElementById('selected-product-display').innerText = '商品を選択してください';
+      document.getElementById('add-order-btn').disabled = true;
+    }
+
+    // --- モーダル: 退店・一括会計 ---
+    function handleCheckoutModal() {
+      const cust = activeCustomers.find(c => c.id === currentSelectedCustomerId);
+      if (!cust) return;
+
+      const unpaidTotal = cust.items.filter(i => !i.paid).reduce((sum, i) => sum + i.price, 0);
+      document.getElementById('checkout-modal-amount').innerText = `¥${unpaidTotal.toLocaleString()}`;
+
+      document.getElementById('checkout-modal').classList.remove('hidden');
+    }
+
+    function closeCheckoutModal() {
+      document.getElementById('checkout-modal').classList.add('hidden');
+    }
+
+    function execCheckout(payType) {
+      const custIdx = activeCustomers.findIndex(c => c.id === currentSelectedCustomerId);
+      if (custIdx === -1) return;
+
+      const cust = activeCustomers[custIdx];
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+      // 未払い分をすべて支払い済みに更新
+      cust.items.forEach(item => {
+        if (!item.paid) {
+          item.paid = true;
+          item.payType = payType;
+        }
+      });
+
+      cust.checkoutTime = timeStr;
+
+      // 履歴へ移動
+      salesHistory.unshift(cust);
+      activeCustomers.splice(custIdx, 1);
+
+      saveData();
+      renderCustomerList();
+      closeCheckoutModal();
+      closeDetailModal();
+
+      alert(`${cust.name} の退店・会計処理が完了しました。`);
+    }
+
+    // --- TAB 2: 商品管理 ---
+    function handleSaveProduct(e) {
+      e.preventDefault();
+      const name = document.getElementById('prod-name').value.trim();
+      const price = parseInt(document.getElementById('prod-price').value) || 0;
+      const category = document.getElementById('prod-category').value;
+      const defaultPaid = document.getElementById('prod-default-paid').value === 'true';
+
+      if (!name) return;
+
+      const newProd = {
+        id: 'p_' + Date.now(),
+        name: name,
+        price: price,
+        category: category,
+        defaultPaid: defaultPaid
+      };
+
+      products.push(newProd);
+      saveData();
+      renderProductList();
+      renderQuickMenuButtons();
+
+      document.getElementById('product-form').reset();
+    }
+
+    function renderProductList() {
+      const container = document.getElementById('registered-products-list');
+      container.innerHTML = '';
+
+      products.forEach((p, idx) => {
+        const row = document.createElement('div');
+        row.className = 'py-3 flex justify-between items-center';
+        row.innerHTML = `
+          <div>
+            <div class="font-bold text-lg text-gray-800">${p.name}</div>
+            <div class="text-xs text-gray-400">
+              カテゴリ: ${p.category} | ${p.defaultPaid ? 'キャッシュオン推奨' : '後払い'}
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="font-extrabold text-lg text-gray-900">¥${p.price.toLocaleString()}</span>
+            <button onclick="deleteProduct(${idx})" class="text-red-500 hover:text-red-700 p-2 text-sm font-bold">削除</button>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function deleteProduct(idx) {
+      if (confirm('この商品を削除しますか？')) {
+        products.splice(idx, 1);
+        saveData();
+        renderProductList();
+        renderQuickMenuButtons();
+      }
+    }
+
+    // --- TAB 3: 売上管理 ---
+    function renderSalesSummary() {
+      const today = new Date().toLocaleDateString('ja-JP');
+      document.getElementById('sales-today-date').innerText = today;
+
+      let grandTotal = 0;
+      let totalCash = 0;
+      let totalCashless = 0;
+
+      let chargeTotal = 0;
+      let drinkTotal = 0;
+      let foodTotal = 0;
+
+      salesHistory.forEach(cust => {
+        cust.items.forEach(item => {
+          if (item.paid) {
+            grandTotal += item.price;
+            if (item.payType === 'cash') totalCash += item.price;
+            if (item.payType === 'cashless') totalCashless += item.price;
+
+            if (item.category === 'charge') chargeTotal += item.price;
+            else if (item.category === 'drink') drinkTotal += item.price;
+            else if (item.category === 'food') foodTotal += item.price;
+          }
+        });
+      });
+
+      document.getElementById('total-sales-amount').innerText = `¥${grandTotal.toLocaleString()}`;
+      document.getElementById('sales-cash').innerText = `¥${totalCash.toLocaleString()}`;
+      document.getElementById('sales-cashless').innerText = `¥${totalCashless.toLocaleString()}`;
+
+      document.getElementById('sales-charge').innerText = `¥${chargeTotal.toLocaleString()}`;
+      document.getElementById('sales-drink').innerText = `¥${drinkTotal.toLocaleString()}`;
+      document.getElementById('sales-food').innerText = `¥${foodTotal.toLocaleString()}`;
+
+      // 履歴一覧の描画
+      const historyContainer = document.getElementById('history-list');
+      historyContainer.innerHTML = '';
+
+      if (salesHistory.length === 0) {
+        historyContainer.innerHTML = '<div class="text-center text-gray-400 py-6">本日の退店データはありません</div>';
+        return;
+      }
+
+      salesHistory.forEach(cust => {
+        const total = cust.items.reduce((s, i) => s + i.price, 0);
+        const card = document.createElement('div');
+        card.className = 'p-4 bg-gray-50 rounded-2xl border border-gray-200 flex justify-between items-center';
+        card.innerHTML = `
+          <div>
+            <div class="font-bold text-lg text-gray-800">${cust.name}</div>
+            <div class="text-xs text-gray-500">
+              ${cust.checkinTime} 〜 ${cust.checkoutTime || '--:--'} (${cust.guests}名)
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="text-xl font-extrabold text-slate-800">¥${total.toLocaleString()}</div>
+            <span class="text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">会計完了</span>
+          </div>
+        `;
+        historyContainer.appendChild(card);
+      });
+    }
+  </script>
+</body>
+</html>
