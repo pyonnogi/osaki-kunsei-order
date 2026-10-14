@@ -4,15 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bar Order & Tab Manager</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
-    <div id="app" class="max-w-md mx-auto p-4 pb-24"></div>
+    <div id="app" class="max-w-md mx-auto p-4 pb-24">
+        <!-- 読み込み中の表示（もしJSが動けば一瞬で消えます） -->
+        <div class="text-center py-20 text-slate-500 font-bold">読み込み中...</div>
+    </div>
 
     <script>
+        // エラーが発生したときに画面に文字として表示する安全装置
+        window.onerror = function(msg, url, line) {
+            document.getElementById('app').innerHTML = `
+                <div class="bg-rose-950 border border-rose-800 p-4 rounded-xl text-rose-200 mt-10">
+                    <h3 class="font-bold text-lg mb-1">エラーが発生しました</h3>
+                    <p class="text-xs">${msg} (行: ${line})</p>
+                </div>
+            `;
+        };
+
         // --- データ管理 ---
-        let customers = JSON.parse(localStorage.getItem('bar_customers')) || [];
-        let menuItems = JSON.parse(localStorage.getItem('bar_menu')) || [
+        let customers = JSON.parse(localStorage.getItem('bar_customers') || '[]');
+        let menuItems = JSON.parse(localStorage.getItem('bar_menu') || 'null') || [
             { id: 1, name: '生ビール', price: 800, category: 'ドリンク' },
             { id: 2, name: 'ハイボール', price: 700, category: 'ドリンク' },
             { id: 3, name: 'ジントニック', price: 800, category: 'ドリンク' },
@@ -20,7 +34,7 @@
             { id: 5, name: '特製から揚げ', price: 900, category: 'フード' },
             { id: 6, name: 'テキーラショット', price: 1000, category: 'ショット' }
         ];
-        let salesHistory = JSON.parse(localStorage.getItem('bar_sales')) || [];
+        let salesHistory = JSON.parse(localStorage.getItem('bar_sales') || '[]');
 
         let currentView = 'home'; 
         let selectedCustomerId = null;
@@ -251,371 +265,4 @@
                                 </div>
                                 <div>
                                     ${c.chargePaid ? `
-                                        <span class="bg-emerald-950 text-emerald-400 border border-emerald-800 px-3 py-1.5 rounded-lg text-sm font-bold">回収済み</span>
-                                    ` : `
-                                        <button onclick="payChargeNow('${c.id}')" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3 py-1.5 rounded-lg text-xs">今すぐ回収</button>
-                                    `}
-                                </div>
-                            </div>
-
-                            <div class="mb-4">
-                                <button onclick="openAddOrderModal()" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-lg rounded-xl shadow-lg transition">
-                                    ＋ 注文を追加する
-                                </button>
-                            </div>
-
-                            <h3 class="text-base font-extrabold text-slate-300 mb-2">注文履歴</h3>
-                            ${c.orders.length === 0 ? `
-                                <p class="text-slate-500 text-sm py-4 text-center bg-slate-950/50 rounded-xl border border-slate-800/50">注文履歴はありません</p>
-                            ` : `
-                                <div class="space-y-2 mb-4">
-                                    ${c.orders.map((o, idx) => `
-                                        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between items-center">
-                                            <div>
-                                                <span class="text-white font-bold">${escapeHtml(o.name)}</span>
-                                                <span class="text-slate-400 text-xs ml-1">×${o.qty}</span>
-                                                <div class="text-xs">
-                                                    ${o.paymentType === 'tab' ? '<span class="text-amber-400 font-bold">後払いタブ</span>' : '<span class="text-emerald-400 font-bold">キャッシュオン(即時回収済)</span>'}
-                                                </div>
-                                            </div>
-                                            <div class="text-right flex items-center gap-2">
-                                                <span class="text-base font-black text-white">¥${(o.price * o.qty).toLocaleString()}</span>
-                                                <button onclick="deleteOrder('${c.id}', ${idx})" class="text-slate-500 hover:text-rose-400 text-xs font-bold px-1.5 py-1">削除</button>
-                                            </div>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            `}
-                        </div>
-
-                        <div class="border-t border-slate-800 pt-4 mt-2">
-                            <div class="flex justify-between items-center mb-3">
-                                <span class="text-base font-bold text-slate-300">本日のお会計（未払い分）</span>
-                                <span class="text-3xl font-black text-amber-400">¥${totalDue.toLocaleString()}</span>
-                            </div>
-                            <button onclick="checkoutCustomer('${c.id}')" class="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xl rounded-xl shadow-lg transition">
-                                精算して退店する
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function payChargeNow(custId) {
-            const c = customers.find(x => x.id === custId);
-            if (!c) return;
-            c.chargePaid = true;
-            salesHistory.push({
-                id: 'sale_' + Date.now(),
-                date: new Date().toISOString(),
-                type: 'charge',
-                customerName: c.name,
-                amount: c.chargeAmount
-            });
-            saveToStorage();
-            render();
-        }
-
-        function deleteOrder(custId, orderIdx) {
-            const c = customers.find(x => x.id === custId);
-            if (!c) return;
-            c.orders.splice(orderIdx, 1);
-            saveToStorage();
-            render();
-        }
-
-        // --- 追加注文モーダル ---
-        function openAddOrderModal() {
-            showAddOrderModal = true;
-            render();
-        }
-
-        function closeAddOrderModal() {
-            showAddOrderModal = false;
-            render();
-        }
-
-        function renderAddOrderModal() {
-            return `
-                <div class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl max-h-[85vh] overflow-y-auto">
-                        <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
-                            <h3 class="text-xl font-black text-white">注文の追加</h3>
-                            <button onclick="closeAddOrderModal()" class="text-slate-400 hover:text-white text-xl font-bold">✕</button>
-                        </div>
-
-                        <div class="space-y-3">
-                            ${menuItems.map(m => `
-                                <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex justify-between items-center">
-                                    <div>
-                                        <div class="text-white font-bold text-base">${escapeHtml(m.name)}</div>
-                                        <div class="text-amber-400 font-black text-sm">¥${m.price.toLocaleString()}</div>
-                                    </div>
-                                    <div class="flex gap-2">
-                                        <button onclick="addOrderToCustomer(${m.id}, 'tab')" class="px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-sm">
-                                            ＋タブ
-                                        </button>
-                                        <button onclick="addOrderToCustomer(${m.id}, 'cash')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-800 font-black rounded-lg text-sm">
-                                            即時(現金)
-                                        </button>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function addOrderToCustomer(menuId, paymentType) {
-            const c = customers.find(x => x.id === selectedCustomerId);
-            const m = menuItems.find(x => x.id === menuId);
-            if (!c || !m) return;
-
-            c.orders.push({
-                name: m.name,
-                price: m.price,
-                qty: 1,
-                paymentType: paymentType === 'tab' ? 'tab' : 'cash'
-            });
-
-            if (paymentType === 'cash') {
-                salesHistory.push({
-                    id: 'sale_' + Date.now(),
-                    date: new Date().toISOString(),
-                    type: 'cash_on',
-                    customerName: c.name,
-                    amount: m.price
-                });
-            }
-
-            saveToStorage();
-            closeAddOrderModal();
-        }
-
-        // --- 精算・退店ロジック ---
-        function checkoutCustomer(custId) {
-            const c = customers.find(x => x.id === custId);
-            if (!c) return;
-
-            let totalCollected = 0;
-            if (!c.chargePaid) {
-                totalCollected += c.chargeAmount;
-                salesHistory.push({
-                    id: 'sale_' + Date.now(),
-                    date: new Date().toISOString(),
-                    type: 'charge',
-                    customerName: c.name,
-                    amount: c.chargeAmount
-                });
-            }
-
-            const tabOrders = c.orders.filter(o => o.paymentType === 'tab');
-            const tabTotal = tabOrders.reduce((sum, o) => sum + (o.price * o.qty), 0);
-            if (tabTotal > 0) {
-                totalCollected += tabTotal;
-                salesHistory.push({
-                    id: 'sale_' + Date.now(),
-                    date: new Date().toISOString(),
-                    type: 'tab_checkout',
-                    customerName: c.name,
-                    amount: tabTotal
-                });
-            }
-
-            lastCheckoutData = {
-                name: c.name,
-                peopleCount: c.peopleCount,
-                checkInTime: c.checkInTime,
-                chargeAmount: c.chargePaid ? 0 : c.chargeAmount,
-                orders: tabOrders,
-                tabTotal: tabTotal,
-                grandTotal: totalCollected
-            };
-
-            c.status = 'closed';
-            saveToStorage();
-            selectedCustomerId = null;
-            showReceiptModal = true;
-            render();
-        }
-
-        // --- 領収書プレビュー ---
-        function renderReceiptModal() {
-            const d = lastCheckoutData;
-            if (!d) return '';
-
-            return `
-                <div class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-                        <div class="text-center border-b border-slate-800 pb-3 mb-4">
-                            <h3 class="text-2xl font-black text-amber-400">精算完了 / 明細</h3>
-                            <p class="text-sm text-slate-400 mt-1">${escapeHtml(d.name)} 様</p>
-                        </div>
-
-                        <div class="space-y-2 mb-6 text-sm">
-                            ${d.chargeAmount > 0 ? `
-                                <div class="flex justify-between text-slate-300">
-                                    <span>チャージ (${d.peopleCount}名)</span>
-                                    <span class="font-bold">¥${d.chargeAmount.toLocaleString()}</span>
-                                </div>
-                            ` : ''}
-                            ${d.orders.map(o => `
-                                <div class="flex justify-between text-slate-300">
-                                    <span>${escapeHtml(o.name)} ×${o.qty}</span>
-                                    <span class="font-bold">¥${(o.price * o.qty).toLocaleString()}</span>
-                                </div>
-                            `).join('')}
-                            <div class="border-t border-slate-800 pt-3 flex justify-between items-center text-lg font-black text-white">
-                                <span>本日領収額</span>
-                                <span class="text-2xl text-amber-400">¥${d.grandTotal.toLocaleString()}</span>
-                            </div>
-                        </div>
-
-                        <button onclick="closeReceiptModal()" class="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl">
-                            閉じる
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
-
-        function closeReceiptModal() {
-            showReceiptModal = false;
-            lastCheckoutData = null;
-            render();
-        }
-
-        // --- メニュー管理 ---
-        function renderMenuManager() {
-            return `
-                <div>
-                    <h2 class="text-xl font-black text-white mb-4">⚙️ メニュー管理</h2>
-
-                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-6">
-                        <h3 class="text-base font-bold text-slate-200 mb-3">新しい商品を追加</h3>
-                        <form onsubmit="handleAddNewMenu(event)" class="space-y-3">
-                            <div>
-                                <label class="block text-xs font-bold text-slate-400 mb-1">商品名</label>
-                                <input type="text" id="newMenuName" required placeholder="例: カシスオレンジ" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold">
-                            </div>
-                            <div class="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-400 mb-1">価格 (円)</label>
-                                    <input type="number" id="newMenuPrice" required min="0" placeholder="800" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-400 mb-1">カテゴリ</label>
-                                    <select id="newMenuCategory" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold">
-                                        <option value="ドリンク">ドリンク</option>
-                                        <option value="フード">フード</option>
-                                        <option value="ショット">ショット</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <button type="submit" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl mt-2">追加する</button>
-                        </form>
-                    </div>
-
-                    <h3 class="text-base font-bold text-slate-200 mb-3">登録済み商品</h3>
-                    <div class="space-y-2">
-                        ${menuItems.map((m, idx) => `
-                            <div class="bg-slate-900 border border-slate-800 p-3.5 rounded-xl flex justify-between items-center">
-                                <div>
-                                    <div class="text-white font-bold">${escapeHtml(m.name)}</div>
-                                    <div class="text-amber-400 font-bold text-sm">¥${m.price.toLocaleString()} <span class="text-xs text-slate-500">(${m.category})</span></div>
-                                </div>
-                                <button onclick="deleteMenuItem(${idx})" class="text-slate-500 hover:text-rose-400 text-xs font-bold px-3 py-1.5 bg-slate-950 rounded-lg">削除</button>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-        }
-
-        function handleAddNewMenu(e) {
-            e.preventDefault();
-            const name = document.getElementById('newMenuName').value;
-            const price = parseInt(document.getElementById('newMenuPrice').value);
-            const category = document.getElementById('newMenuCategory').value;
-
-            menuItems.push({ id: Date.now(), name, price, category });
-            saveToStorage();
-            render();
-        }
-
-        function deleteMenuItem(idx) {
-            menuItems.splice(idx, 1);
-            saveToStorage();
-            render();
-        }
-
-        // --- 売上ダッシュボード ---
-        function renderSalesDashboard() {
-            const totalSales = salesHistory.reduce((sum, s) => sum + s.amount, 0);
-            const chargeSales = salesHistory.filter(s => s.type === 'charge').reduce((sum, s) => sum + s.amount, 0);
-            const cashOnSales = salesHistory.filter(s => s.type === 'cash_on').reduce((sum, s) => sum + s.amount, 0);
-            const tabCheckoutSales = salesHistory.filter(s => s.type === 'tab_checkout').reduce((sum, s) => sum + s.amount, 0);
-
-            return `
-                <div>
-                    <h2 class="text-xl font-black text-white mb-4">📊 本日の売上</h2>
-
-                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-5 shadow-xl">
-                        <span class="text-xs font-bold text-slate-400">本日の総合計売上</span>
-                        <div class="text-4xl font-black text-amber-400 mt-1">¥${totalSales.toLocaleString()}</div>
-                    </div>
-
-                    <div class="space-y-2 mb-6">
-                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex justify-between items-center text-sm">
-                            <span class="text-slate-300 font-bold">チャージ売上</span>
-                            <span class="text-lg font-black text-white">¥${chargeSales.toLocaleString()}</span>
-                        </div>
-                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex justify-between items-center text-sm">
-                            <span class="text-slate-300 font-bold">キャッシュオン(即時)売上</span>
-                            <span class="text-lg font-black text-white">¥${cashOnSales.toLocaleString()}</span>
-                        </div>
-                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex justify-between items-center text-sm">
-                            <span class="text-slate-300 font-bold">後払いタブ精算売上</span>
-                            <span class="text-lg font-black text-white">¥${tabCheckoutSales.toLocaleString()}</span>
-                        </div>
-                    </div>
-
-                    <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-base font-bold text-slate-200">売上ログ</h3>
-                        ${salesHistory.length > 0 ? `<button onclick="clearSalesHistory()" class="text-xs text-rose-400 font-bold hover:underline">ログ消去</button>` : ''}
-                    </div>
-
-                    ${salesHistory.length === 0 ? `
-                        <p class="text-slate-500 text-sm py-6 text-center bg-slate-900/50 rounded-xl border border-slate-800">売上ログはありません</p>
-                    ` : `
-                        <div class="space-y-2">
-                            ${salesHistory.slice().reverse().map(s => `
-                                <div class="bg-slate-900 border border-slate-800 p-3 rounded-xl flex justify-between items-center text-sm">
-                                    <div>
-                                        <span class="text-white font-bold">${escapeHtml(s.customerName)}</span>
-                                        <span class="text-xs text-slate-400 ml-1">(${s.type === 'charge' ? 'チャージ' : s.type === 'cash_on' ? '即時' : 'タブ精算'})</span>
-                                    </div>
-                                    <span class="text-base font-black text-amber-400">¥${s.amount.toLocaleString()}</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                    `}
-                </div>
-            `;
-        }
-
-        function clearSalesHistory() {
-            if (confirm('本日の売上ログをリセットしますか？')) {
-                salesHistory = [];
-                saveToStorage();
-                render();
-            }
-        }
-
-        // 初期描画実行
-        render();
-    </script>
-</body>
-</html>
+                                        <span class="bg-emerald-950 text-emerald-400 border border-emerald-800 px-3 py-1.5 rounded-lg text-sm font-bold">回収済み
